@@ -44,16 +44,45 @@ export const workflowRouter = router({
             });
         }),
 
-    getAll: protectedProcedure.query(async ({ ctx }) => {
-        return await prisma.workflow.findMany({
-            where: {
-                userId: ctx.userId,
-            },
-            orderBy: {
-                updatedAt: 'desc',
-            },
-        });
-    }),
+    getAll: protectedProcedure
+        .input(
+            z.object({
+                limit: z.number().min(1).max(100).nullish(),
+                cursor: z.string().nullish(), // ID of the last item
+                search: z.string().optional(),
+            })
+        )
+        .query(async ({ ctx, input }) => {
+            const limit = input.limit ?? 10;
+            const { cursor, search } = input;
+
+            const items = await prisma.workflow.findMany({
+                take: limit + 1, // Get one extra to determine if there is a next page
+                where: {
+                    userId: ctx.userId,
+                    name: search ? {
+                        contains: search,
+                        mode: 'insensitive',
+                    } : undefined,
+                },
+                cursor: cursor ? { id: cursor } : undefined,
+                orderBy: [
+                    { updatedAt: 'desc' },
+                    { id: 'desc' } // Ensure deterministic sort
+                ],
+            });
+
+            let nextCursor: typeof cursor | undefined = undefined;
+            if (items.length > limit) {
+                const nextItem = items.pop();
+                nextCursor = nextItem!.id;
+            }
+
+            return {
+                items,
+                nextCursor,
+            };
+        }),
 
     getById: protectedProcedure
         .input(z.object({ id: z.string() }))

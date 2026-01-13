@@ -15,9 +15,10 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Save, FolderOpen, Loader2, Trash2 } from "lucide-react";
+import { Save, FolderOpen, Loader2, Trash2, Search, Inbox } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { formatDistanceToNow } from "date-fns";
+import { useDebounce } from "@/hooks/useDebounce";
 
 export function WorkflowControls() {
     const { nodes, edges, setWorkflow } = useFlowStore();
@@ -28,6 +29,10 @@ export function WorkflowControls() {
     const [workflowName, setWorkflowName] = useState("");
     const [loadingId, setLoadingId] = useState<string | null>(null);
 
+    // Search State
+    const [searchQuery, setSearchQuery] = useState("");
+    const debouncedSearch = useDebounce(searchQuery, 500);
+
     // tRPC Hooks
     const createWorkflow = trpc.workflow.create.useMutation({
         onSuccess: () => {
@@ -37,10 +42,26 @@ export function WorkflowControls() {
         },
     });
 
-    const { data: workflows, isPending: isLoadingWorkflows } =
-        trpc.workflow.getAll.useQuery(undefined, {
+    // Infinite Query for Load Dialog
+    const {
+        data,
+        fetchNextPage,
+        hasNextPage,
+        isFetchingNextPage,
+        isLoading,
+        isError
+    } = trpc.workflow.getAll.useInfiniteQuery(
+        {
+            limit: 10,
+            search: debouncedSearch,
+        },
+        {
+            getNextPageParam: (lastPage) => lastPage.nextCursor,
             enabled: loadDialogOpen,
-        });
+        }
+    );
+
+    const workflows = data?.pages.flatMap((page) => page.items) ?? [];
 
     const deleteWorkflow = trpc.workflow.delete.useMutation({
         onSuccess: () => {
@@ -116,23 +137,36 @@ export function WorkflowControls() {
                         Load
                     </Button>
                 </DialogTrigger>
-                <DialogContent className="max-w-2xl">
+                <DialogContent className="max-w-2xl flex flex-col h-[500px]">
                     <DialogHeader>
                         <DialogTitle>Load Workflow</DialogTitle>
                     </DialogHeader>
-                    <div className="h-[300px] w-full border rounded-md p-4">
-                        {isLoadingWorkflows ? (
+
+                    {/* Search Bar */}
+                    <div className="relative">
+                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input
+                            placeholder="Search workflows..."
+                            className="pl-9"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                        />
+                    </div>
+
+                    <div className="flex-1 w-full border rounded-md p-4 overflow-hidden relative">
+                        {isLoading ? (
                             <div className="flex h-full items-center justify-center">
                                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                             </div>
-                        ) : workflows?.length === 0 ? (
-                            <div className="flex h-full items-center justify-center text-muted-foreground">
-                                No saved workflows found.
+                        ) : workflows.length === 0 ? (
+                            <div className="flex flex-col h-full items-center justify-center text-muted-foreground gap-2">
+                                <Inbox className="h-10 w-10 opacity-50" />
+                                <p>No workflows found</p>
                             </div>
                         ) : (
-                            <ScrollArea className="h-full">
+                            <ScrollArea className="h-full pr-4">
                                 <div className="space-y-2">
-                                    {workflows?.map((wf: { id: string; name: string; updatedAt: Date }) => (
+                                    {workflows.map((wf) => (
                                         <div
                                             key={wf.id}
                                             className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
@@ -163,6 +197,23 @@ export function WorkflowControls() {
                                             </div>
                                         </div>
                                     ))}
+
+                                    {/* Load More Trigger */}
+                                    {hasNextPage && (
+                                        <div className="pt-2 flex justify-center">
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => fetchNextPage()}
+                                                disabled={isFetchingNextPage}
+                                            >
+                                                {isFetchingNextPage ? (
+                                                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                                ) : null}
+                                                Load More
+                                            </Button>
+                                        </div>
+                                    )}
                                 </div>
                             </ScrollArea>
                         )}
