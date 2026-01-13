@@ -273,11 +273,37 @@ html, body {
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border;
   }
   body {
     @apply bg-background text-foreground;
   }
 }
 
- 
+/* Celestial UI Animations */
+@keyframes floating {
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-12px); }
+  100% { transform: translateY(0px); }
+}
+
+@keyframes nebula-shift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes filament-flow {
+  from { stroke-dashoffset: 24; }
+  to { stroke-dashoffset: 0; }
+}
+
+.antigravity-bg {
+  background: radial-gradient(circle at 50% 50%, #06080a 0%, #0b0f14 100%);
+  background-size: 200% 200%;
+  animation: nebula-shift 15s ease infinite;
+}
+
+.floating-node {
+  animation: floating 6s ease-in-out infinite;
+}

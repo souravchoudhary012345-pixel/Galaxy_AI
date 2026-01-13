@@ -12,7 +12,7 @@ import { useMemo } from "react";
 import TextNode from "./nodes/TextNode";
 import ImageNode from "./nodes/ImageNode";
 import LLMNode from "./nodes/LLMNode";
-import OutputNode from "./nodes/OutputNode";  
+import OutputNode from "./nodes/OutputNode";
 import AnimatedEdge from "./edges/AnimatedEdge";
 
 export default function FlowCanvas() {
@@ -36,8 +36,16 @@ export default function FlowCanvas() {
     animated: AnimatedEdge
   }), []);
 
+  // Assuming defaultEdgeOptions is defined elsewhere or will be defined.
+  // For now, I'll define a placeholder if it's not imported/defined.
+  // If it's meant to be imported, the instruction didn't include the import.
+  // Based on the prompt, it's likely meant to use the custom edge by default.
+  const defaultEdgeOptions = useMemo(() => ({
+    type: 'animated',
+  }), []);
+
   return (
-    <div className="flex-1 h-full">
+    <div className="h-screen w-screen antigravity-bg">
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -47,15 +55,17 @@ export default function FlowCanvas() {
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
         isValidConnection={isValidConnection}
+        defaultEdgeOptions={defaultEdgeOptions} // Use the custom edge by default
         fitView
       >
-        <MiniMap
-          style={{ background: '#111827', border: '1px solid #1f2937' }}
-          nodeColor="#6366f1"
-          maskColor="#0b0f14"
-        />
         <Controls />
-        <Background gap={18} size={1} />
+        <MiniMap
+          className="!bg-black/20"
+          nodeColor="#6366f1"
+          maskColor="rgba(0,0,0,0.4)"
+          style={{ opacity: 0.4 }}
+        />
+        {/* Background removed to allow nebula effect */}
       </ReactFlow>
     </div>
   );
