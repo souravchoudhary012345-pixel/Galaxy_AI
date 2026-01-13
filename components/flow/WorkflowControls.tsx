@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useFlowStore } from "@/store/flowStore";
+import { Node, Edge } from "reactflow";
 import { trpc } from "@/utils/trpc";
 import { Button } from "@/components/ui/button";
 import {
@@ -61,7 +62,7 @@ export function WorkflowControls() {
             setLoadingId(id);
             const data = await utils.workflow.getById.fetch({ id });
             if (data && data.nodes && data.edges) {
-                setWorkflow(data.nodes as any, data.edges as any);
+                setWorkflow(data.nodes as Node[], data.edges as Edge[]);
                 setLoadDialogOpen(false);
             }
         } catch (error) {
@@ -131,7 +132,7 @@ export function WorkflowControls() {
                         ) : (
                             <ScrollArea className="h-full">
                                 <div className="space-y-2">
-                                    {workflows?.map((wf) => (
+                                    {workflows?.map((wf: { id: string; name: string; updatedAt: Date }) => (
                                         <div
                                             key={wf.id}
                                             className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors"

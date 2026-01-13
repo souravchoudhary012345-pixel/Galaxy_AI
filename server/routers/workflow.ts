@@ -3,7 +3,7 @@ import { router, protectedProcedure } from '../trpc';
 import { prisma } from '../../lib/prisma'; // Relative path
 import { currentUser } from '@clerk/nextjs/server';
 import { TRPCError } from '@trpc/server';
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI, Part } from "@google/generative-ai";
 
 export const workflowRouter = router({
     create: protectedProcedure
@@ -79,21 +79,26 @@ export const workflowRouter = router({
             edges: z.any().optional(),
         }))
         .mutation(async ({ ctx, input }) => {
-            const workflow = await prisma.workflow.findUnique({
-                where: { id: input.id },
+            // Check if exists
+            const existing = await prisma.workflow.findUnique({
+                where: { id: input.id }
             });
 
-            if (!workflow || workflow.userId !== ctx.userId) {
-                throw new TRPCError({ code: 'NOT_FOUND' });
+            if (!existing) {
+                throw new TRPCError({ code: "NOT_FOUND" });
             }
 
+            // Verify ownership
+            if (existing.userId !== ctx.userId) {
+                throw new TRPCError({ code: "FORBIDDEN" });
+            }
             return await prisma.workflow.update({
                 where: { id: input.id },
                 data: {
                     name: input.name,
-                    nodes: input.nodes ?? undefined,
-                    edges: input.edges ?? undefined,
-                },
+                    nodes: input.nodes ?? [],
+                    edges: input.edges ?? [],
+                }
             });
         }),
 
@@ -130,7 +135,6 @@ export const workflowRouter = router({
                 const genAI = new GoogleGenerativeAI(apiKey);
                 const model = genAI.getGenerativeModel({ model: input.model });
 
-                let contents = [];
                 if (input.system_prompt) {
                     // Gemini supports system instructions in the model config, but for simplicity/compatibility 
                     // we can prepend it or use the proper config if available in this SDK version. 
@@ -148,7 +152,7 @@ export const workflowRouter = router({
                 }
 
                 // Constructing the prompt parts
-                const parts: any[] = [];
+                const parts: Part[] = [];
                 if (input.system_prompt) {
                     parts.push({ text: `System: ${input.system_prompt}\nUser:` });
                 }
@@ -179,11 +183,11 @@ export const workflowRouter = router({
                     outputType: 'text'
                 };
 
-            } catch (error: any) {
+            } catch (error) {
                 console.error("Gemini Error:", error);
                 throw new TRPCError({
                     code: "INTERNAL_SERVER_ERROR",
-                    message: error.message || "Failed to generate content"
+                    message: (error as Error).message || "Failed to generate content"
                 });
             }
         }),
