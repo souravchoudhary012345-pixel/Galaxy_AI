@@ -1,6 +1,7 @@
 "use client";
 
 import { Type, Image, Brain, PanelLeft } from "lucide-react";
+import { UserButton } from "@clerk/nextjs";
 import { useFlowStore } from "@/store/flowStore";
 import {
   Sidebar as ShadcnSidebar,
@@ -70,8 +71,19 @@ export function Sidebar() {
         </SidebarGroup>
       </SidebarContent>
       {/* Footer with Workflow Controls */}
-      <SidebarFooter className="p-2 border-t border-sidebar-border/50">
+      <SidebarFooter className="p-2 border-t border-sidebar-border/50 gap-2">
         <WorkflowControls />
+        <div className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-accent/50 transition-colors">
+          <UserButton
+            showName
+            appearance={{
+              elements: {
+                userButtonBox: "flex-row-reverse",
+                userButtonOuterIdentifier: "text-muted-foreground text-xs font-medium"
+              }
+            }}
+          />
+        </div>
       </SidebarFooter>
       <SidebarHeader className="hidden">
         <SidebarTrigger />

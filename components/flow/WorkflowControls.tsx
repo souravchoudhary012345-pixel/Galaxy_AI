@@ -83,7 +83,7 @@ export function WorkflowControls() {
             setLoadingId(id);
             const data = await utils.workflow.getById.fetch({ id });
             if (data && data.nodes && data.edges) {
-                setWorkflow(data.nodes as Node[], data.edges as Edge[]);
+                setWorkflow(data.nodes as unknown as Node[], data.edges as unknown as Edge[]);
                 setLoadDialogOpen(false);
             }
         } catch (error) {

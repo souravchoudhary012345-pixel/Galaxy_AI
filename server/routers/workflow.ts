@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { router, protectedProcedure } from '../trpc';
-import { prisma } from '../../lib/prisma'; // Relative path
-import { currentUser } from '@clerk/nextjs/server';
+import { prisma } from '../../lib/prisma';
+import { clerkClient } from '@clerk/nextjs/server';
 import { TRPCError } from '@trpc/server';
 import { GoogleGenerativeAI, Part } from "@google/generative-ai";
 
@@ -13,35 +13,49 @@ export const workflowRouter = router({
             edges: z.any().optional(),
         }))
         .mutation(async ({ ctx, input }) => {
-            // Sync user from Clerk to DB
-            const user = await currentUser();
-            if (!user) {
-                throw new TRPCError({ code: "UNAUTHORIZED" });
-            }
-            const email = user.emailAddresses[0]?.emailAddress;
-            if (!email) {
-                throw new TRPCError({ code: "BAD_REQUEST", message: "User must have an email" });
-            }
+            try {
+                // Sync user from Clerk to DB
+                if (!ctx.userId) {
+                    throw new TRPCError({ code: "UNAUTHORIZED" });
+                }
 
-            await prisma.user.upsert({
-                where: { clerkId: ctx.userId },
-                create: {
-                    clerkId: ctx.userId,
-                    email: email,
-                },
-                update: {
-                    email: email // Keep email in sync
-                },
-            });
+                const client = await clerkClient();
+                const user = await client.users.getUser(ctx.userId);
 
-            return await prisma.workflow.create({
-                data: {
-                    name: input.name,
-                    nodes: input.nodes ?? undefined,
-                    edges: input.edges ?? undefined,
-                    userId: ctx.userId,
-                },
-            });
+                if (!user) {
+                    throw new TRPCError({ code: "UNAUTHORIZED", message: "User not found in Clerk" });
+                }
+                const email = user.emailAddresses[0]?.emailAddress;
+                if (!email) {
+                    throw new TRPCError({ code: "BAD_REQUEST", message: "User must have an email" });
+                }
+
+                await prisma.user.upsert({
+                    where: { clerkId: ctx.userId },
+                    create: {
+                        clerkId: ctx.userId,
+                        email: email,
+                    },
+                    update: {
+                        email: email // Keep email in sync
+                    },
+                });
+
+                return await prisma.workflow.create({
+                    data: {
+                        name: input.name,
+                        nodes: input.nodes ?? undefined,
+                        edges: input.edges ?? undefined,
+                        userId: ctx.userId,
+                    },
+                });
+            } catch (error) {
+                console.error("Workflow Creation Error:", error);
+                throw new TRPCError({
+                    code: "INTERNAL_SERVER_ERROR",
+                    message: (error as Error).message || "Failed to create workflow"
+                });
+            }
         }),
 
     getAll: protectedProcedure
@@ -50,6 +64,7 @@ export const workflowRouter = router({
                 limit: z.number().min(1).max(100).nullish(),
                 cursor: z.string().nullish(), // ID of the last item
                 search: z.string().optional(),
+                direction: z.any().optional(), // Infinite Query often sends this
             })
         )
         .query(async ({ ctx, input }) => {
@@ -164,22 +179,6 @@ export const workflowRouter = router({
                 const genAI = new GoogleGenerativeAI(apiKey);
                 const model = genAI.getGenerativeModel({ model: input.model });
 
-                if (input.system_prompt) {
-                    // Gemini supports system instructions in the model config, but for simplicity/compatibility 
-                    // we can prepend it or use the proper config if available in this SDK version. 
-                    // The @google/genai SDK usually handles system instructions via 'systemInstruction' in model params
-                    // but let's stick to simple prompting if uncertain about SDK version features, 
-                    // OR use the correct property. 
-                    // Checking package.json: "@google/genai": "^1.34.0". This is likely the new Google Gen AI SDK.
-                    // Wait, the new SDK might be distinct from @google/generative-ai. 
-                    // Let's assume standard content structure for now.
-
-                    // Correction: The user's package.json has "@google/genai": "^1.34.0".
-                    // This might be the beta SDK or the specific Node one. 
-                    // Let's assume standard usage pattern for safety:
-                    // If it fails, I'll debug.
-                }
-
                 // Constructing the prompt parts
                 const parts: Part[] = [];
                 if (input.system_prompt) {
@@ -189,11 +188,26 @@ export const workflowRouter = router({
                 parts.push({ text: input.user_message });
 
                 if (input.images && input.images.length > 0) {
-                    // Assuming base64 images are passed. need to convert to inline data
-                    // format: "data:image/png;base64,..."
                     for (const img of input.images) {
                         const base64Data = img.split(',')[1];
                         const mimeType = img.split(';')[0].split(':')[1];
+
+                        // Validate MIME type for Gemini
+                        const supportedBundles = [
+                            'image/png',
+                            'image/jpeg',
+                            'image/webp',
+                            'image/heic',
+                            'image/heif'
+                        ];
+
+                        if (!supportedBundles.includes(mimeType)) {
+                            throw new TRPCError({
+                                code: "BAD_REQUEST",
+                                message: `Unsupported image format: ${mimeType}. Supported formats are: PNG, JPEG, WEBP, HEIC, HEIF.`
+                            });
+                        }
+
                         parts.push({
                             inlineData: {
                                 mimeType,

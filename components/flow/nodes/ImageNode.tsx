@@ -15,10 +15,42 @@ export default function ImageNode({ id, data }: NodeProps<ImageNodeData>) {
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = () => {
-      updateNodeData(id, { preview: reader.result as string });
+    reader.onload = async () => {
+      let result = reader.result as string;
+
+      // Convert AVIF to PNG as Gemini doesn't support AVIF
+      if (result.startsWith("data:image/avif")) {
+        try {
+          result = await convertToPng(result);
+        } catch (err) {
+          console.error("Failed to convert AVIF image", err);
+          // Fallback to original, though it might fail at API level
+        }
+      }
+
+      updateNodeData(id, { preview: result });
     };
     reader.readAsDataURL(file);
+  };
+
+  const convertToPng = (src: string): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const img = new window.Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          reject(new Error("Could not get canvas context"));
+          return;
+        }
+        ctx.drawImage(img, 0, 0);
+        resolve(canvas.toDataURL("image/png"));
+      };
+      img.onerror = (err) => reject(err);
+      img.src = src;
+    });
   };
 
   const clearImage = () => {
@@ -39,26 +71,26 @@ export default function ImageNode({ id, data }: NodeProps<ImageNodeData>) {
         </div>
       </label>
 
-   {data.preview && (
-  <div className="relative h-40 w-full overflow-hidden rounded-lg">
-    <Image
-      src={data.preview}
-      alt="Preview"
-      fill
-      unoptimized
-      className="object-cover"
-    />
+      {data.preview && (
+        <div className="relative h-40 w-full overflow-hidden rounded-lg">
+          <Image
+            src={data.preview}
+            alt="Preview"
+            fill
+            unoptimized
+            className="object-cover"
+          />
 
-     {/* Remove image only */}
-    <button
-      onClick={clearImage}
-      className="nodrag absolute right-2 top-2 rounded-md bg-black/60 p-1 text-white hover:bg-red-600 transition"
-      title="Remove image"
-    >
-      <Trash2 size={14} />
-    </button>
-  </div>
-)}
+          {/* Remove image only */}
+          <button
+            onClick={clearImage}
+            className="nodrag absolute right-2 top-2 rounded-md bg-black/60 p-1 text-white hover:bg-red-600 transition"
+            title="Remove image"
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
+      )}
 
       <Handle type="source" position={Position.Right} />
     </NodeShell>

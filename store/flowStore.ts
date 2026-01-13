@@ -80,7 +80,7 @@ export const useFlowStore = create<FlowState>((set, get) => ({
 
     // Cycle Detection (DAG) 
 
-    if (hasCycle({ source: connection.source!, target: connection.target! }, nodes, edges)) {
+    if (hasCycle({ source: connection.source!, target: connection.target! }, nodes, get().edges)) {
       return false;
     }
 
