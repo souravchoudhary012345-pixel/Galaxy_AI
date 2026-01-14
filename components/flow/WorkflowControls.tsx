@@ -29,11 +29,9 @@ export function WorkflowControls() {
     const [workflowName, setWorkflowName] = useState("");
     const [loadingId, setLoadingId] = useState<string | null>(null);
 
-    // Search State
     const [searchQuery, setSearchQuery] = useState("");
     const debouncedSearch = useDebounce(searchQuery, 500);
 
-    // tRPC Hooks
     const createWorkflow = trpc.workflow.create.useMutation({
         onSuccess: () => {
             setSaveDialogOpen(false);
@@ -42,7 +40,6 @@ export function WorkflowControls() {
         },
     });
 
-    // Infinite Query for Load Dialog
     const {
         data,
         fetchNextPage,
@@ -87,7 +84,6 @@ export function WorkflowControls() {
                 setLoadDialogOpen(false);
             }
         } catch (error) {
-            console.error("Failed to load workflow", error);
         } finally {
             setLoadingId(null);
         }
@@ -95,7 +91,6 @@ export function WorkflowControls() {
 
     return (
         <div className="flex items-center gap-2">
-            {/* Save Dialog */}
             <Dialog open={saveDialogOpen} onOpenChange={setSaveDialogOpen}>
                 <DialogTrigger asChild>
                     <Button variant="outline" size="sm" className="gap-2">
@@ -129,7 +124,6 @@ export function WorkflowControls() {
                 </DialogContent>
             </Dialog>
 
-            {/* Load Dialog */}
             <Dialog open={loadDialogOpen} onOpenChange={setLoadDialogOpen}>
                 <DialogTrigger asChild>
                     <Button variant="outline" size="sm" className="gap-2">
@@ -142,7 +136,6 @@ export function WorkflowControls() {
                         <DialogTitle>Load Workflow</DialogTitle>
                     </DialogHeader>
 
-                    {/* Search Bar */}
                     <div className="relative">
                         <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                         <Input
@@ -198,7 +191,8 @@ export function WorkflowControls() {
                                         </div>
                                     ))}
 
-                                    {/* Load More Trigger */}
+
+
                                     {hasNextPage && (
                                         <div className="pt-2 flex justify-center">
                                             <Button

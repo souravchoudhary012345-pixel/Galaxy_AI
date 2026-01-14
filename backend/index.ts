@@ -23,7 +23,6 @@ const server = createHTTPServer({
                 });
                 userId = verify.sub;
             } catch (e) {
-                // console.error("Token verification failed", e);
             }
         }
 
@@ -31,9 +30,8 @@ const server = createHTTPServer({
             userId,
         };
     },
-    maxBodySize: 10 * 1024 * 1024, // 10MB limit for images
+    maxBodySize: 10 * 1024 * 1024,
 });
 
 const port = 3015;
-console.log(`Backend server listening on port ${port}`);
 server.listen(port);

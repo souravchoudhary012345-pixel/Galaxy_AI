@@ -3,7 +3,7 @@ import { router, protectedProcedure } from '../trpc';
 import { prisma } from '../../lib/prisma';
 import { clerkClient } from '@clerk/nextjs/server';
 import { TRPCError } from '@trpc/server';
-import { GoogleGenerativeAI, Part } from "@google/generative-ai";
+import { genAI } from '../../lib/gemini';
 
 export const workflowRouter = router({
     create: protectedProcedure
@@ -14,7 +14,6 @@ export const workflowRouter = router({
         }))
         .mutation(async ({ ctx, input }) => {
             try {
-                // Sync user from Clerk to DB
                 if (!ctx.userId) {
                     throw new TRPCError({ code: "UNAUTHORIZED" });
                 }
@@ -37,20 +36,19 @@ export const workflowRouter = router({
                         email: email,
                     },
                     update: {
-                        email: email // Keep email in sync
+                        email: email
                     },
                 });
 
                 return await prisma.workflow.create({
                     data: {
                         name: input.name,
-                        nodes: input.nodes ?? undefined,
-                        edges: input.edges ?? undefined,
+                        nodes: input.nodes ?? [],
+                        edges: input.edges ?? [],
                         userId: ctx.userId,
                     },
                 });
             } catch (error) {
-                console.error("Workflow Creation Error:", error);
                 throw new TRPCError({
                     code: "INTERNAL_SERVER_ERROR",
                     message: (error as Error).message || "Failed to create workflow"
@@ -62,9 +60,9 @@ export const workflowRouter = router({
         .input(
             z.object({
                 limit: z.number().min(1).max(100).nullish(),
-                cursor: z.string().nullish(), // ID of the last item
+                cursor: z.string().nullish(),
                 search: z.string().optional(),
-                direction: z.any().optional(), // Infinite Query often sends this
+                direction: z.any().optional(),
             })
         )
         .query(async ({ ctx, input }) => {
@@ -72,7 +70,7 @@ export const workflowRouter = router({
             const { cursor, search } = input;
 
             const items = await prisma.workflow.findMany({
-                take: limit + 1, // Get one extra to determine if there is a next page
+                take: limit + 1,
                 where: {
                     userId: ctx.userId,
                     name: search ? {
@@ -83,7 +81,7 @@ export const workflowRouter = router({
                 cursor: cursor ? { id: cursor } : undefined,
                 orderBy: [
                     { updatedAt: 'desc' },
-                    { id: 'desc' } // Ensure deterministic sort
+                    { id: 'desc' }
                 ],
             });
 
@@ -123,7 +121,6 @@ export const workflowRouter = router({
             edges: z.any().optional(),
         }))
         .mutation(async ({ ctx, input }) => {
-            // Check if exists
             const existing = await prisma.workflow.findUnique({
                 where: { id: input.id }
             });
@@ -132,7 +129,6 @@ export const workflowRouter = router({
                 throw new TRPCError({ code: "NOT_FOUND" });
             }
 
-            // Verify ownership
             if (existing.userId !== ctx.userId) {
                 throw new TRPCError({ code: "FORBIDDEN" });
             }
@@ -165,72 +161,45 @@ export const workflowRouter = router({
     runGemini: protectedProcedure
         .input(z.object({
             system_prompt: z.string().optional(),
-            user_message: z.string(),
+            user_message: z.string().min(1, "Message cannot be empty"),
             model: z.string().default("gemini-2.0-flash"),
             images: z.array(z.string()).optional(),
         }))
         .mutation(async ({ input }) => {
-            const apiKey = process.env.GEMINI_API_KEY;
-            if (!apiKey) {
-                throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Gemini API Key not configured" });
-            }
-
             try {
-                const genAI = new GoogleGenerativeAI(apiKey);
-                const model = genAI.getGenerativeModel({ model: input.model });
-
-                // Constructing the prompt parts
-                const parts: Part[] = [];
-                if (input.system_prompt) {
-                    parts.push({ text: `System: ${input.system_prompt}\nUser:` });
-                }
-
-                parts.push({ text: input.user_message });
+                const parts: any[] = [{ text: input.user_message }];
 
                 if (input.images && input.images.length > 0) {
-                    for (const img of input.images) {
-                        const base64Data = img.split(',')[1];
-                        const mimeType = img.split(';')[0].split(':')[1];
-
-                        // Validate MIME type for Gemini
-                        const supportedBundles = [
-                            'image/png',
-                            'image/jpeg',
-                            'image/webp',
-                            'image/heic',
-                            'image/heif'
-                        ];
-
-                        if (!supportedBundles.includes(mimeType)) {
-                            throw new TRPCError({
-                                code: "BAD_REQUEST",
-                                message: `Unsupported image format: ${mimeType}. Supported formats are: PNG, JPEG, WEBP, HEIC, HEIF.`
-                            });
-                        }
+                    input.images.forEach(img => {
+                        const [header, data] = img.split(',');
+                        const mimeType = header.split(';')[0].split(':')[1];
 
                         parts.push({
                             inlineData: {
-                                mimeType,
-                                data: base64Data
+                                data,
+                                mimeType
                             }
                         });
-                    }
+                    });
                 }
 
-                const result = await model.generateContent(parts);
-                const response = result.response;
-                const text = response.text();
+                const response = await genAI.models.generateContent({
+                    model: input.model,
+                    contents: parts,
+                    config: {
+                        systemInstruction: input.system_prompt,
+                    },
+                });
 
                 return {
-                    output: text,
+                    output: response.text || "No response generated.",
                     outputType: 'text'
                 };
 
             } catch (error) {
-                console.error("Gemini Error:", error);
                 throw new TRPCError({
                     code: "INTERNAL_SERVER_ERROR",
-                    message: (error as Error).message || "Failed to generate content"
+                    message: (error as Error).message || "Gemini failed to process request"
                 });
             }
         }),

@@ -22,13 +22,7 @@ model Workflow {
   nodes     Json?
   edges     Json?
   userId    String
-  user      User     @relation(fields: [userId], references: [clerkId]) // Linking to clerkId for easier auth mapping, or internal ID?
-  // Ideally link to User.id but Clerk gives us clerkId primarily.
-  // Verification: Let's link to User.id (internal) essentially, but we need to resolve it. 
-  // actually, mapping to clerkId is effectively using it as a foreign key. 
-  // BUT, best practice: User.id is internal PK. We find user by clerkId.
-  // So: user User @relation(fields: [userId], references: [id])
-  // We will upsert user by clerkId to get the helper/internal ID.
+  user      User     @relation(fields: [userId], references: [clerkId])
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
